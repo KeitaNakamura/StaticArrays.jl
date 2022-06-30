@@ -188,7 +188,7 @@ end
         dimension_mismatch_fail(SA, a)
     end
     SA′ = construct_type(SA, a)
-    return SA′(unroll_tuple(a, Length(SA′)))
+    return SA′(unroll_tuple(IndexStyle(a), a, Size(SA′), Length(SA′)))
 end
 
 length_val(a::T) where {T <: StaticArrayLike} = length_val(Size(T))
@@ -201,6 +201,19 @@ unroll_tuple(a::AbstractArray, ::Length{1}) = @inbounds (a[],)
     quote
         @_inline_meta
         Δj = firstindex(a)
+        @inbounds return $(Expr(:tuple, exprs...))
+    end
+end
+# handle IndexStyle
+unroll_tuple(::IndexStyle, a::AbstractArray, ::Size, ::Length{0}) = ()
+unroll_tuple(::IndexStyle, a::AbstractArray, ::Size, ::Length{1}) = @inbounds (a[],)
+unroll_tuple(s::IndexStyle, a::AbstractArray, sz::Size, l::Length) = _unroll_tuple(s, a, sz, l)
+_unroll_tuple(::IndexLinear, a::AbstractArray, ::Size, l::Length) = unroll_tuple(a, l)
+@generated function _unroll_tuple(::IndexCartesian, a::AbstractArray, ::Size{S}, ::Length) where {S}
+    exprs = (:(a[$I+ΔI]) for I in CartesianIndices(@. UnitRange(0, S-1)))
+    quote
+        @_inline_meta
+        ΔI = CartesianIndex(map(first, axes(a)))
         @inbounds return $(Expr(:tuple, exprs...))
     end
 end
